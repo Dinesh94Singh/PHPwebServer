@@ -1,0 +1,95 @@
+<?php 
+/*
+ * PHP WEB Server
+ *
+ */
+
+require 'src/Server.php'; 
+require 'src/Response.php';
+
+//Folder where files to be shared on request
+$dataServerDir = "web_data/";
+
+// we never need the first argument
+array_shift( $argv );
+
+// the next argument should be the port if not use 80
+if ( empty( $argv ) )
+{
+	//Set default Port
+	$port = 80;
+} else {
+	$port = array_shift( $argv );
+}
+
+// create a new server instance
+$server = new Server( '127.0.0.1', $port );
+
+// start listening
+$server->listen('handleRequest');
+
+function handleRequest($request) {
+global $dataServerDir;
+
+	//Get Parameters from URL
+	$reqParams = $request->parameters;
+
+	//Make default Resonse object
+	$response = new MyResponse();
+
+	$responseError = '';
+
+	//Verify Parameters passed in URL
+	if (is_array($reqParams)) {
+
+		//Read file name from URL 
+		$reqFile = $reqParams['filename']; 
+		//Check File Name empty
+		if ($reqFile) {
+
+			//Now We have file name 
+			$abspath = getcwd();
+			$filepath = $abspath . "/" . $dataServerDir . $reqFile;
+			
+			//Verify file exists
+			if (file_exists($filepath)) {
+
+			//Prepare the headers for sending file 
+			$ext = strtolower(substr(strrchr($filepath, '.'), 1));
+				switch($ext) {
+					case 'pdf': $mime = 'application/pdf'; break;
+					case 'zip': $mime = 'application/zip'; break;
+					case 'jpeg':
+					case 'gif':
+					case 'jpg': $mime = "image/$ext"; break;
+					default: $mime = 'text/html';
+				}
+						 
+			    $response->header('Content-Description:', 'File Transfer');
+			    $response->header('Content-Type', $mime);
+			    $response->header('Content-Disposition', 'inline; filename='.basename($filepath));
+			    $response->header('Expires', '0');
+			    $response->header('Cache-Control', 'must-revalidate');
+			    $response->header('Pragma', 'public');
+			    $response->header('Content-Length', filesize($filepath));
+
+			//Read file contents
+			    $body = file_get_contents($filepath);
+			    $response->body($body);
+
+			} else {
+				$responseError = "<h1>Error 404</h1><br>Requested file " . basename($filepath). " does not exists in Server";
+			}
+		} else {
+			$responseError = "Missing filename parameter or filename parameter value : Ex: ?filename=somfile";
+		}
+	} else {
+		$responseError = "Missing Parameters in URL: Ex: ?filename=somfile";
+	}
+
+	//Verify any error and send the response with default headers
+	if ( $responseError ) {
+		$response->body($responseError);
+	}
+	return $response;
+}
